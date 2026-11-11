@@ -22,9 +22,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: windows-x64, os: windows-latest, targets: x86_64-pc-windows-msvc }
-          - { name: windows-x86, os: windows-latest, targets: i686-pc-windows-msvc }
-          - { name: windows-arm64, os: windows-11-arm, targets: aarch64-pc-windows-msvc }
+          - { name: windows-x64, os: windows-latest, targets: x86_64-pc-windows-msvc, msvc: x64 }
+          - { name: windows-x86, os: windows-latest, targets: i686-pc-windows-msvc, msvc: x86 }
+          - { name: windows-arm64, os: windows-11-arm, targets: aarch64-pc-windows-msvc, msvc: arm64 }
           # The oldest supported Ubuntu, so the library runs on older glibc.
           - { name: linux-x64, os: ubuntu-22.04, targets: x86_64-unknown-linux-gnu }
           - { name: linux-arm64, os: ubuntu-22.04-arm, targets: aarch64-unknown-linux-gnu }
@@ -40,9 +40,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.TAG }}
-      - uses: dtolnay/rust-toolchain@stable
+      # rust-toolchain.toml picks the toolchain; add the targets to that one.
+      - name: Rust targets
+        run: rustup target add ${{ matrix.targets }}
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: matrix.msvc
         with:
-          targets: ${{ matrix.targets }}
+          arch: ${{ matrix.msvc }}
       - name: Build
         run: |
           for t in ${{ matrix.targets }}; do
@@ -88,9 +92,8 @@ jobs:
           EOF
           pkg="op2formats-${TAG#v}-${{ matrix.name }}"
           case "${{ matrix.name }}" in
-            windows-arm64|windows-x86) echo "skipped (no matching compiler set up)"; exit 0 ;;
             windows-*)
-              cmd //c "call \"C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat\" && cl /nologo /I$pkg\\include smoke.c $pkg\\lib\\op2formats.dll.lib"
+              cl -nologo -I"$pkg/include" smoke.c "$pkg/lib/op2formats.dll.lib"
               cp "$pkg/bin/op2formats.dll" . && ./smoke.exe ;;
             linux-*) cc -I"$pkg/include" smoke.c -L"$pkg/lib" -lop2formats -Wl,-rpath,"$PWD/$pkg/lib" -o smoke && ./smoke ;;
             macos-*) cc -I"$pkg/include" smoke.c -L"$pkg/lib" -lop2formats -Wl,-rpath,"$PWD/$pkg/lib" -o smoke && ./smoke ;;

@@ -1,0 +1,101 @@
+name: Release
+
+# Builds the C interface (op2formats-c) for Windows, Linux and macOS and attaches the packages to the GitHub release
+# of the tag. Runs when a v* tag is pushed, or by hand for an existing tag.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and attach to, e.g. v0.4.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows-x64, os: windows-latest, targets: x86_64-pc-windows-msvc }
+          - { name: windows-x86, os: windows-latest, targets: i686-pc-windows-msvc }
+          - { name: windows-arm64, os: windows-11-arm, targets: aarch64-pc-windows-msvc }
+          # The oldest supported Ubuntu, so the library runs on older glibc.
+          - { name: linux-x64, os: ubuntu-22.04, targets: x86_64-unknown-linux-gnu }
+          - { name: linux-arm64, os: ubuntu-22.04-arm, targets: aarch64-unknown-linux-gnu }
+          # One universal library for Apple silicon and Intel Macs.
+          - { name: macos-universal, os: macos-latest, targets: "aarch64-apple-darwin x86_64-apple-darwin" }
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
+      - name: Build
+        run: |
+          for t in ${{ matrix.targets }}; do
+            cargo build --release -p op2formats-c --target "$t"
+          done
+      - name: Package
+        run: |
+          pkg="op2formats-${TAG#v}-${{ matrix.name }}"
+          mkdir -p "$pkg/include" "$pkg/lib"
+          cp op2formats-c/include/op2formats.h "$pkg/include/"
+          cp LICENSE "$pkg/"
+          cp op2formats-c/README.md "$pkg/README.md"
+          set -- ${{ matrix.targets }}
+          d="target/$1/release"
+          case "${{ matrix.name }}" in
+            windows-*)
+              mkdir -p "$pkg/bin"
+              cp "$d/op2formats.dll" "$pkg/bin/"
+              cp "$d/op2formats.dll.lib" "$d/op2formats.lib" "$pkg/lib/"
+              [ -f "$d/op2formats.pdb" ] && cp "$d/op2formats.pdb" "$pkg/bin/"
+              7z a -tzip "$pkg.zip" "$pkg" >/dev/null
+              echo "ASSET=$pkg.zip" >> "$GITHUB_ENV" ;;
+            linux-*)
+              cp "$d/libop2formats.so" "$d/libop2formats.a" "$pkg/lib/"
+              tar czf "$pkg.tar.gz" "$pkg"
+              echo "ASSET=$pkg.tar.gz" >> "$GITHUB_ENV" ;;
+            macos-*)
+              lipo -create -output "$pkg/lib/libop2formats.dylib" target/{aarch64,x86_64}-apple-darwin/release/libop2formats.dylib
+              lipo -create -output "$pkg/lib/libop2formats.a" target/{aarch64,x86_64}-apple-darwin/release/libop2formats.a
+              install_name_tool -id @rpath/libop2formats.dylib "$pkg/lib/libop2formats.dylib"
+              lipo -info "$pkg/lib/libop2formats.dylib"
+              tar czf "$pkg.tar.gz" "$pkg"
+              echo "ASSET=$pkg.tar.gz" >> "$GITHUB_ENV" ;;
+          esac
+      - name: Smoke test (the library loads and reports its version)
+        run: |
+          set -- ${{ matrix.targets }}
+          cat > smoke.c <<'EOF'
+          #include <stdio.h>
+          #include <string.h>
+          #include "op2formats.h"
+          int main(void) { const char *v = op2f_version(); printf("op2formats %s\n", v); return v && *v ? 0 : 1; }
+          EOF
+          pkg="op2formats-${TAG#v}-${{ matrix.name }}"
+          case "${{ matrix.name }}" in
+            windows-arm64|windows-x86) echo "skipped (no matching compiler set up)"; exit 0 ;;
+            windows-*)
+              cmd //c "call \"C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat\" && cl /nologo /I$pkg\\include smoke.c $pkg\\lib\\op2formats.dll.lib"
+              cp "$pkg/bin/op2formats.dll" . && ./smoke.exe ;;
+            linux-*) cc -I"$pkg/include" smoke.c -L"$pkg/lib" -lop2formats -Wl,-rpath,"$PWD/$pkg/lib" -o smoke && ./smoke ;;
+            macos-*) cc -I"$pkg/include" smoke.c -L"$pkg/lib" -lop2formats -Wl,-rpath,"$PWD/$pkg/lib" -o smoke && ./smoke ;;
+          esac
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "$ASSET" --clobber

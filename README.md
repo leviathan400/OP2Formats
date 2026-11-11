@@ -82,8 +82,9 @@ A few parts still assume op2-rs's repository layout. None affects normal use:
   folder above the Cargo workspace a development build runs from (`source_tree`, found from the
   running program's path); here it finds nothing and the normal install search is used.
 - A cross-check in `tests/game_data.rs` (`rules_and_tech_trees_parse`) reads op2-rs's
-  recorded oracle runs (`$OP2_RUNS_DIR`, else `harness/oracle/runs` in the source tree) and skips when they aren't there; only `OP2_REQUIRE_RUNS=1` (op2-rs's
-  switch for them) makes that a failure, so leave it unset here. With `OP2_REQUIRE_DATA=1`
-  every test passes against an OPU 1.4.1 install.
+  recorded oracle runs (`$OP2_RUNS_DIR`, else `harness/oracle/runs` in the source tree) and
+  skips when they aren't there; only `OP2_REQUIRE_RUNS=1` (op2-rs's switch for them) makes
+  that a failure, so leave it unset here. With `OP2_REQUIRE_DATA=1` every test passes against
+  an OPU 1.4.1 install.
 - The installer tests (`inno_extract`, `opu_package`) need test installers named by their
   own variables (see `tests/inno_test.iss`) and pass without checking anything otherwise.

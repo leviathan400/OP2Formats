@@ -6,6 +6,11 @@ the version is 0.x, a breaking change raises the minor version.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-11
+
+Finding op2-rs's source tree at run time, from bufke (pull request 2), so op2-rs's tools and tests work with
+the crate from crates.io. No breaking changes.
+
 ### Added
 
 - `source_tree`: the checkout a development build runs from (the folder above the Cargo workspace whose `target`
@@ -98,7 +103,8 @@ of Outpost 2, as op2-rs had it at commit `69fb43ff`, with its full history. The 
   downloading it (feature `fetch-opu`).
 - Package metadata for crates.io (repository, description, `rust-version` 1.99).
 
-[Unreleased]: https://github.com/leviathan400/OP2Formats/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/leviathan400/OP2Formats/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/leviathan400/OP2Formats/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/leviathan400/OP2Formats/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/leviathan400/OP2Formats/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/leviathan400/OP2Formats/releases/tag/v0.1.0

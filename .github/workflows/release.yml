@@ -43,10 +43,6 @@ jobs:
       # rust-toolchain.toml picks the toolchain; add the targets to that one.
       - name: Rust targets
         run: rustup target add ${{ matrix.targets }}
-      - uses: ilammy/msvc-dev-cmd@v1
-        if: matrix.msvc
-        with:
-          arch: ${{ matrix.msvc }}
       - name: Build
         run: |
           for t in ${{ matrix.targets }}; do
@@ -81,9 +77,12 @@ jobs:
               tar czf "$pkg.tar.gz" "$pkg"
               echo "ASSET=$pkg.tar.gz" >> "$GITHUB_ENV" ;;
           esac
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: matrix.msvc
+        with:
+          arch: ${{ matrix.msvc }}
       - name: Smoke test (the library loads and reports its version)
         run: |
-          set -- ${{ matrix.targets }}
           cat > smoke.c <<'EOF'
           #include <stdio.h>
           #include <string.h>
@@ -92,12 +91,18 @@ jobs:
           EOF
           pkg="op2formats-${TAG#v}-${{ matrix.name }}"
           case "${{ matrix.name }}" in
-            windows-*)
-              cl -nologo -I"$pkg/include" smoke.c "$pkg/lib/op2formats.dll.lib"
-              cp "$pkg/bin/op2formats.dll" . && ./smoke.exe ;;
+            windows-*) echo "PKG=$pkg" >> "$GITHUB_ENV" ;;
             linux-*) cc -I"$pkg/include" smoke.c -L"$pkg/lib" -lop2formats -Wl,-rpath,"$PWD/$pkg/lib" -o smoke && ./smoke ;;
             macos-*) cc -I"$pkg/include" smoke.c -L"$pkg/lib" -lop2formats -Wl,-rpath,"$PWD/$pkg/lib" -o smoke && ./smoke ;;
           esac
+      # In cmd, so cl finds MSVC's link.exe rather than Git Bash's link.
+      - name: Smoke test (Windows)
+        if: matrix.msvc
+        shell: cmd
+        run: |
+          copy %PKG%\bin\op2formats.dll . || exit /b 1
+          cl -nologo -I%PKG%\include smoke.c %PKG%\lib\op2formats.dll.lib || exit /b 1
+          smoke.exe
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}
